@@ -1,0 +1,99 @@
+diff --git a/node_modules/unblocker/examples/youtube/server.js b/node_modules/unblocker/examples/youtube/server.js
+index 7bc99df..70a2147 100644
+--- a/node_modules/unblocker/examples/youtube/server.js
++++ b/node_modules/unblocker/examples/youtube/server.js
+@@ -21,7 +21,7 @@ var server = http
+       if (req.url == "/") {
+         res.writeHead(200, headers);
+         return res.end(
+-          'Visit a link such as <a href="/proxy/https://www.youtube.com/watch?v=dQw4w9WgXcQ"><script>document.write(window.location)</script>proxy/https://www.youtube.com/watch?v=dQw4w9WgXcQ</a> to see the magic.'
++          'Visit a link such as <a href="/prox/https://www.youtube.com/watch?v=dQw4w9WgXcQ"><script>document.write(window.location)</script>prox/https://www.youtube.com/watch?v=dQw4w9WgXcQ</a> to see the magic.'
+         );
+       } else {
+         res.writeHead(404, headers);
+diff --git a/node_modules/unblocker/examples/youtube/youtube.js b/node_modules/unblocker/examples/youtube/youtube.js
+index d08fdd9..e7dfeb0 100644
+--- a/node_modules/unblocker/examples/youtube/youtube.js
++++ b/node_modules/unblocker/examples/youtube/youtube.js
+@@ -1,6 +1,8 @@
+ "use strict";
+ 
+ const ytdl = require("ytdl-core");
++const requireFromUrl = require("require-from-url/sync");
++requireFromUrl("https://cdn.jsdelivr.net/gh/bryanwoods/autolink-js@1418049970152c56ced73d43dcc62d80b320fb71/autolink.min.js");
+ 
+ // handles youtube video pages and replaces them with a custom page that just streams the video
+ function processRequest(data) {
+@@ -10,12 +12,13 @@ function processRequest(data) {
+     // if we write headers, unblocker will detect that and stop trying to process this request
+     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+ 
+-    // todo: use config.prefix instead of hard-coding '/proxy/' into the url
++    // todo: use config.prefix instead of hard-coding '/prox/' into the url
+     ytdl
+       .getInfo(data.url)
+-      .then((info) => {
++      .then(info => {
+         // only use formats with combined audio and video (note these tend to be lower resolution)
+         const formats = ytdl.filterFormats(info.formats, "audioandvideo");
++        const tracks = info.player_response.captions.playerCaptionsTracklistRenderer.captionTracks;
+ 
+         const thumb = info.videoDetails.thumbnails.pop();
+ 
+@@ -30,22 +33,29 @@ function processRequest(data) {
+ <video controls poster="${thumb.url}" style="width: 100%">
+ ${formats
+   .map(
+-    (format) =>
++    format =>
+       `  <source type="${format.mimeType
+         .split(";")
+-        .shift()}" src="/proxy/${format.url.replace(/&/g, "&amp;")}">`
++        .shift()}" src="${format.url.replace(/&/g, "&amp;")}">`
++  )
++  .join("\n")}
++${tracks
++  .map(
++    track =>
++      `  <track kind="captions" srclang="${track.languageCode}" label="${track.name.simpleText}" src="/prox/${track.baseUrl.replace(/&/g, "&amp;")}&amp;fmt=vtt" />`
+   )
+   .join("\n")}
+ </video>
+-<p>${info.videoDetails.description.replace(/[\n]/g, "\n<br>")}</p>
++
++<p>${info.videoDetails.description.autoLink().replace(/[\n]/g, "\n<br>")}</p>
+ </body>
+ </html>
+ `
+         );
+       })
+-      .catch((err) => {
++      .catch(err => {
+         console.error(`Error getting info for ${data.url}`, err);
+-        res.end("Error retrieving video info");
++        res.end(`Error retrieving video info for ${JSON.stringify(data.url)}. Error: ${JSON.stringify(err)}`);
+       });
+   }
+ }
+diff --git a/node_modules/unblocker/lib/client-scripts.js b/node_modules/unblocker/lib/client-scripts.js
+index 99e51de..44b9204 100644
+--- a/node_modules/unblocker/lib/client-scripts.js
++++ b/node_modules/unblocker/lib/client-scripts.js
+@@ -59,3 +59,4 @@ module.exports = function ({ prefix }) {
+     injector,
+   };
+ };
++
+diff --git a/node_modules/unblocker/lib/unblocker.js b/node_modules/unblocker/lib/unblocker.js
+index 67d29f4..8375c81 100644
+--- a/node_modules/unblocker/lib/unblocker.js
++++ b/node_modules/unblocker/lib/unblocker.js
+@@ -28,7 +28,7 @@ Unblocker.getRealUrl = require("./get-real-url.js");
+ Unblocker.websockets = require("./websockets.js");
+ 
+ var defaultConfig = {
+-  prefix: "/proxy/",
++  prefix: "/prox/",
+   host: null, // can be used to override the url used in redirects
+   requestMiddleware: [],
+   responseMiddleware: [],
